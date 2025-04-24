@@ -2,7 +2,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Cyclic Sweep Trainer - Final Compact</title>
+  <title>Cyclic Frequency Sweep Guide</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -23,7 +23,7 @@
       font-size: 16px;
     }
     input[type=number] {
-      width: 65px;
+      width: 70px;
     }
     .row {
       display: flex;
@@ -44,15 +44,16 @@
   </style>
 </head>
 <body>
-  <h3>Cyclic Frequency Sweep Trainer</h3>
+  <h3>Cyclic Frequency Sweep Guide</h3>
   <div class="row">
-    <label>Start:</label><input id="startFreq" type="number" value="0.125" step="0.01">
-    <label>End:</label><input id="endFreq" type="number" value="2.5" step="0.01">
-    <label>Step:</label><input id="stepFreq" type="number" value="0.125" step="0.01">
+    <label>Start:</label><input id="startFreq" type="number" value="0.125" step="0.01"><span>Hz</span>
+    <label>End:</label><input id="endFreq" type="number" value="2.5" step="0.01"><span>Hz</span>
+    <label>Step:</label><input id="stepFreq" type="number" value="0.125" step="0.01"><span>Hz</span>
   </div>
   <div class="row">
     <label>Repeats:</label><input id="repeats" type="number" value="2" step="1">
     <label>Final Amp %:</label><input id="endAmplitude" type="number" value="50" step="1">
+    <label>Input Size:</label><input id="inputInches" type="number" value="1.0" step="0.01"><span>in</span>
   </div>
   <div class="row scale-buttons">
     <strong>Scale:</strong>
@@ -67,22 +68,22 @@
   </div>
   <canvas id="sweepCanvas" width="360" height="500"></canvas>
   <div class="row">
-    <button onclick="startSweep()">START</button>
-    <button onclick="stopSweep()">STOP</button>
+    <button onclick="startSweep()" style="background-color:#28a745;color:white;border:none;border-radius:50%;width:80px;height:80px;font-size:18px;font-weight:bold;">START</button>
+    <button onclick="stopSweep()" style="background-color:#dc3545;color:white;border:none;width:80px;height:80px;font-size:18px;font-weight:bold;">STOP</button>
   </div>
 
   <script>
     const canvas = document.getElementById("sweepCanvas");
     const ctx = canvas.getContext("2d");
-    const baseAmplitude = 160;
     let scaleFactor = 1.0;
+    let baseAmplitude = 160;
 
     let width = canvas.width;
     let height = canvas.height;
     let centerX = width / 2;
     let centerY = height / 2;
 
-    let freq, maxFreq, stepFreq, repeatsPerFreq, finalAmpPercent;
+    let freq, maxFreq, stepFreq, repeatsPerFreq, finalAmpPercent, inputInches;
     let amplitude = baseAmplitude;
     let phase = 0;
     let omega;
@@ -160,7 +161,7 @@
       drawDot(y);
 
       freqDisplay.innerText = freq.toFixed(3);
-      ampDisplay.innerText = (amplitude / baseAmplitude).toFixed(3);
+      ampDisplay.innerText = ((amplitude / baseAmplitude) * inputInches).toFixed(3);
 
       const sinVal = Math.sin(phase);
       let zone = "";
@@ -183,6 +184,7 @@
       stepFreq = parseFloat(document.getElementById("stepFreq").value);
       repeatsPerFreq = parseInt(document.getElementById("repeats").value);
       finalAmpPercent = parseFloat(document.getElementById("endAmplitude").value);
+      inputInches = parseFloat(document.getElementById("inputInches").value);
       amplitude = baseAmplitude * scaleFactor;
       omega = 2 * Math.PI * freq;
       phase = 0;
