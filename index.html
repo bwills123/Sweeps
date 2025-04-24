@@ -1,0 +1,214 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cyclic Frequency Sweep Guide</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+    canvas {
+      border: 1px solid #ccc;
+      background-color: #f9f9f9;
+      display: block;
+      margin: 4px auto;
+    }
+    button, input {
+      margin: 4px;
+      padding: 8px 14px;
+      font-size: 16px;
+    }
+    input[type=number] {
+      width: 70px;
+    }
+    .row {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .scale-buttons button {
+      width: 36px;
+      height: 36px;
+      font-size: 20px;
+    }
+    .scale-display {
+      font-size: 16px;
+      margin: 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <h3>Cyclic Frequency Sweep Guide</h3>
+  <div class="row">
+    <label>Start:</label><input id="startFreq" type="number" value="0.125" step="0.01"><span>Hz</span>
+    <label>End:</label><input id="endFreq" type="number" value="2.5" step="0.01"><span>Hz</span>
+    <label>Step:</label><input id="stepFreq" type="number" value="0.125" step="0.01"><span>Hz</span>
+  </div>
+  <div class="row">
+    <label>Repeats:</label><input id="repeats" type="number" value="2" step="1">
+    <label>Final Amp %:</label><input id="endAmplitude" type="number" value="50" step="1">
+    <label>Input Size:</label><input id="inputInches" type="number" value="1.0" step="0.01"><span>in</span>
+  </div>
+  <div class="row scale-buttons">
+    <strong>Scale:</strong>
+    <button onclick="adjustScale(-0.01)">-</button>
+    <span class="scale-display" id="scaleDisplay">1.00</span>
+    <button onclick="adjustScale(0.01)">+</button>
+  </div>
+  <div class="row">
+    <strong>Freq:</strong> <span id="freqDisplay">0.125</span> Hz
+    &nbsp;&nbsp;
+    <strong>Amplitude:</strong> <span id="ampDisplay">1.00</span> in
+  </div>
+  <canvas id="sweepCanvas" width="360" height="500"></canvas>
+  <div class="row">
+    <button onclick="startSweep()" style="background-color:#28a745;color:white;border:none;border-radius:50%;width:80px;height:80px;font-size:18px;font-weight:bold;">START</button>
+    <button onclick="stopSweep()" style="background-color:#dc3545;color:white;border:none;width:80px;height:80px;font-size:18px;font-weight:bold;">STOP</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("sweepCanvas");
+    const ctx = canvas.getContext("2d");
+    let scaleFactor = 1.0;
+    let baseAmplitude = 160;
+
+    let width = canvas.width;
+    let height = canvas.height;
+    let centerX = width / 2;
+    let centerY = height / 2;
+
+    let freq, maxFreq, stepFreq, repeatsPerFreq, finalAmpPercent, inputInches;
+    let amplitude = baseAmplitude;
+    let phase = 0;
+    let omega;
+    let cycleTracker = 0;
+    let running = false;
+    let dt = 0.016;
+    let lastZone = "";
+    let animationID;
+
+    const freqDisplay = document.getElementById("freqDisplay");
+    const ampDisplay = document.getElementById("ampDisplay");
+    const scaleDisplay = document.getElementById("scaleDisplay");
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function drawDot(y) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.beginPath();
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(width, centerY);
+      ctx.strokeStyle = "#000";
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, centerY - amplitude);
+      ctx.lineTo(width, centerY - amplitude);
+      ctx.moveTo(0, centerY + amplitude);
+      ctx.lineTo(width, centerY + amplitude);
+      ctx.setLineDash([5, 3]);
+      ctx.strokeStyle = "#aaa";
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(centerX, centerY + y, 14, 0, 2 * Math.PI);
+      ctx.fillStyle = "#007acc";
+      ctx.fill();
+    }
+
+    function beep() {
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.frequency.value = 440;
+      gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+      oscillator.start(audioCtx.currentTime);
+      oscillator.stop(audioCtx.currentTime + 0.1);
+    }
+
+    function loop() {
+      if (!running) return;
+
+      phase += omega * dt;
+      if (phase > 2 * Math.PI) {
+        phase -= 2 * Math.PI;
+        cycleTracker++;
+        if (cycleTracker >= repeatsPerFreq) {
+          freq += stepFreq;
+          if (freq > maxFreq) {
+            stopSweep();
+            return;
+          }
+          omega = 2 * Math.PI * freq;
+          cycleTracker = 0;
+
+          const stepIndex = (freq - parseFloat(document.getElementById("startFreq").value)) / stepFreq;
+          const totalSteps = (maxFreq - parseFloat(document.getElementById("startFreq").value)) / stepFreq;
+          const ampRange = baseAmplitude * (1 - finalAmpPercent / 100);
+          amplitude = (baseAmplitude - ampRange * (stepIndex / totalSteps)) * scaleFactor;
+        }
+      }
+
+      let y = amplitude * Math.sin(phase);
+      drawDot(y);
+
+      freqDisplay.innerText = freq.toFixed(3);
+      ampDisplay.innerText = ((amplitude / baseAmplitude) * inputInches).toFixed(3);
+
+      const sinVal = Math.sin(phase);
+      let zone = "";
+      if (sinVal >= 0.98) zone = "max";
+      else if (sinVal <= -0.98) zone = "min";
+
+      if (zone && zone !== lastZone) {
+        beep();
+        lastZone = zone;
+      }
+      if (!zone) lastZone = "";
+
+      animationID = requestAnimationFrame(loop);
+    }
+
+    function startSweep() {
+      cancelAnimationFrame(animationID);
+      freq = parseFloat(document.getElementById("startFreq").value);
+      maxFreq = parseFloat(document.getElementById("endFreq").value);
+      stepFreq = parseFloat(document.getElementById("stepFreq").value);
+      repeatsPerFreq = parseInt(document.getElementById("repeats").value);
+      finalAmpPercent = parseFloat(document.getElementById("endAmplitude").value);
+      inputInches = parseFloat(document.getElementById("inputInches").value);
+      amplitude = baseAmplitude * scaleFactor;
+      omega = 2 * Math.PI * freq;
+      phase = 0;
+      cycleTracker = 0;
+      lastZone = "";
+      running = true;
+      audioCtx.resume();
+      loop();
+    }
+
+    function stopSweep() {
+      running = false;
+      cancelAnimationFrame(animationID);
+      drawDot(0);
+    }
+
+    function adjustScale(delta) {
+      scaleFactor = Math.max(0.25, Math.min(2.0, scaleFactor + delta));
+      scaleDisplay.innerText = scaleFactor.toFixed(2);
+      amplitude = baseAmplitude * scaleFactor;
+      drawDot(0);
+    }
+
+    drawDot(0);
+  </script>
+</body>
+</html>
